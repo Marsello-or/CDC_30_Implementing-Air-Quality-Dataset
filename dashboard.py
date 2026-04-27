@@ -1,146 +1,153 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np # Ditambahkan untuk perhitungan regresi linear
+import seaborn as sns
 
-# Set Streamlit page configuration
-st.set_page_config(layout="wide", page_title="Air Quality Dashboard")
+# --- Konfigurasi Halaman Streamlit ---
+st.set_page_config(page_title="Dashboard Kualitas Udara Beijing",
+                   page_icon="🌬️",
+                   layout="wide")
 
-st.title("Dashboard Analisis Kualitas Udara")
-st.write("Dashboard ini menampilkan hasil analisis kualitas udara dari tiga stasiun di Beijing: Dingling, Dongsi, dan Gucheng.")
-
-# Fungsi untuk memuat data dengan cache
+# --- Fungsi untuk Memuat Data (dengan caching agar cepat) ---
 @st.cache_data
-def load_data():
-    # Memuat data dari 'main_data.csv' seperti yang diminta pengguna
-    try:
-        df = pd.read_csv('main_data.csv') # Pastikan file ini ada di direktori yang sama saat deployment
-        # Pastikan kolom-kolom terkait waktu bertipe integer jika diperlukan untuk pd.to_datetime
-        df['year'] = df['year'].astype(int)
-        df['month'] = df['month'].astype(int)
-        df['day'] = df['day'].astype(int)
-        df['hour'] = df['hour'].astype(int)
-    except FileNotFoundError:
-        st.error("Error: File 'main_data.csv' tidak ditemukan. Pastikan file CSV ada di direktori yang sama.")
-        st.stop()
-    return df
+def load_data(path):
+    data = pd.read_csv(path)
+    # Pastikan kolom waktu diparsing dengan benar jika diperlukan
+    # Dalam kasus ini, kita akan membuat kolom Date untuk visualisasi
+    data['YearMonth'] = pd.to_datetime(data['year'].astype(str) + '-' + data['month'].astype(str))
+    data['Date'] = pd.to_datetime(data[['year', 'month', 'day']])
+    return data
 
-df = load_data()
+# Load the data
+df_main = load_data('main_data.csv')
 
-# --- Bagian 1: Tren Rata-rata Konsentrasi PM2.5 Bulanan per Stasiun ---
-st.header("1. Tren Rata-rata Konsentrasi PM2.5 Bulanan per Stasiun")
-st.write("Grafik ini menunjukkan bagaimana rata-rata konsentrasi PM2.5 berubah dari bulan ke bulan, serta pola musiman yang terjadi di setiap stasiun (2013-2017).")
+# --- Header Dashboard ---
+st.title("Dashboard Analisis Kualitas Udara Beijing 🌬️")
+st.markdown("Selamat datang di dashboard interaktif untuk menganalisis data kualitas udara di tiga stasiun di Beijing (Dingling, Dongsi, Gucheng) dari 2013 hingga 2017.")
+st.divider()
 
-# Persiapan data untuk BQ1
-df_qa1 = df.copy()
-df_qa1['YearMonth'] = pd.to_datetime(df_qa1['year'].astype(str) + '-' + df_qa1['month'].astype(str))
-pm25_monthly_avg = df_qa1.groupby(['YearMonth', 'station'])['PM2.5'].mean().reset_index()
-pm25_monthly_avg = pm25_monthly_avg.sort_values(by=['YearMonth', 'station'])
+# --- Gambaran Umum Data ---
+st.header("1. Gambaran Umum Data")
+st.write("Berikut adalah 5 baris pertama dari data yang telah dibersihkan:")
+st.dataframe(df_main.head())
+
+st.write("Statistik deskriptif untuk kolom numerik kunci:")
+st.dataframe(df_main[['PM2.5', 'PM10', 'SO2', 'NO2', 'CO', 'O3', 'TEMP', 'PRES', 'DEWP', 'RAIN', 'WSPM']].describe())
+
+st.write("Jumlah entri per stasiun:")
+st.dataframe(df_main['station'].value_counts().reset_index())
+st.divider()
+
+# --- Pertanyaan Bisnis 1: Tren Konsentrasi PM2.5 Bulanan per Stasiun ---
+st.header("2. Tren Konsentrasi PM2.5 Bulanan per Stasiun")
+st.subheader("Bagaimana tren rata-rata konsentrasi PM2.5 bulanan per stasiun berubah dari tahun 2013 hingga 2017, dan apakah ada pola musiman yang konsisten?")
+
+pm25_monthly_avg = df_main.groupby(['YearMonth', 'station'])['PM2.5'].mean().reset_index()
 
 fig1, ax1 = plt.subplots(figsize=(12, 6))
-
-# Menggunakan matplotlib.pyplot.plot secara manual untuk setiap stasiun
-for station in pm25_monthly_avg['station'].unique():
-    station_data = pm25_monthly_avg[pm25_monthly_avg['station'] == station]
-    ax1.plot(station_data['YearMonth'], station_data['PM2.5'], marker='o', label=station)
-
-ax1.set_title('Tren Rata-rata Konsentrasi PM2.5 Bulanan per Stasiun')
+sns.lineplot(data=pm25_monthly_avg, x='YearMonth', y='PM2.5', hue='station', marker='o', ax=ax1, errorbar=None)
+ax1.set_title('Tren Rata-rata Konsentrasi PM2.5 Bulanan per Stasiun (2013-2017)')
 ax1.set_xlabel('Tahun-Bulan')
 ax1.set_ylabel('Rata-rata Konsentrasi PM2.5')
 ax1.tick_params(axis='x', rotation=45)
 ax1.grid(True, linestyle='--', alpha=0.7)
 ax1.legend(title='Stasiun')
-plt.tight_layout()
 st.pyplot(fig1)
 
-st.subheader("Insight Utama BQ1:")
 st.markdown("""
--   **Pola Musiman yang Konsisten:** Ketiga stasiun menunjukkan pola musiman yang sangat konsisten. Konsentrasi PM2.5 cenderung **meningkat secara signifikan pada bulan-bulan musim dingin (sekitar Oktober hingga Maret)** dan **menurun pada bulan-bulan musim panas (sekitar Mei hingga September)**.
--   **Variasi Antar Stasiun:** Stasiun `Dongsi` dan `Gucheng` seringkali menunjukkan tingkat PM2.5 yang lebih tinggi dibandingkan `Dingling`, terutama selama periode polusi tinggi.
+**Insight:**
+*   Terdapat pola musiman yang konsisten di ketiga stasiun, dengan konsentrasi PM2.5 cenderung meningkat signifikan pada musim dingin (Oktober-Maret) dan menurun pada musim panas (Mei-September).
+*   Stasiun Dongsi dan Gucheng sering menunjukkan tingkat PM2.5 yang lebih tinggi dibandingkan Dingling.
 """)
+st.divider()
 
-# --- Bagian 2: Pengaruh Kecepatan Angin Terhadap PM10 di Stasiun Dongsi Berdasarkan Musim ---
-st.header("2. Pengaruh Kecepatan Angin Terhadap PM10 di Stasiun Dongsi Berdasarkan Musim")
-st.write("Analisis ini menunjukkan bagaimana kecepatan angin (WSPM) memengaruhi konsentrasi PM10 di stasiun Dongsi, dengan membedakan antara Musim Kemarau dan Musim Hujan (2013-2017).")
+# --- Pertanyaan Bisnis 2: Pengaruh Kecepatan Angin Terhadap PM10 di Stasiun Dongsi Berdasarkan Musim ---
+st.header("3. Pengaruh Kecepatan Angin Terhadap PM10 di Stasiun Dongsi Berdasarkan Musim")
+st.subheader("Di stasiun Dongsi, bagaimana pengaruh kecepatan angin (WSPM) terhadap PM10 secara harian, dan apakah ada perbedaan signifikan antara musim kemarau dan hujan?")
 
-# Persiapan data untuk BQ2
-df_qa2 = df[df['station'] == 'Dongsi'].copy()
-df_qa2['Date'] = pd.to_datetime(df_qa2[['year', 'month', 'day']])
+# Menyiapkan data untuk Pertanyaan Bisnis 2
+df_qa2 = df_main[df_main['station'] == 'Dongsi'].copy()
 
 def get_season(month):
     if 5 <= month <= 9:
-        return 'Musim Kemarau'
+        return 'Musim Kemarau' # Dry Season
     else:
-        return 'Musim Hujan'
+        return 'Musim Hujan' # Wet Season
 
 df_qa2['Season'] = df_qa2['month'].apply(get_season)
 daily_avg_dongsi = df_qa2.groupby(['Date', 'Season'])[['PM10', 'WSPM']].mean().reset_index()
 
-fig2, (ax2a, ax2b) = plt.subplots(1, 2, figsize=(16, 6))
+fig2, (ax2a, ax2b) = plt.subplots(1, 2, figsize=(18, 6))
 
-# Scatter plot untuk Musim Kemarau
-kemarau_data = daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Kemarau']
-ax2a.scatter(kemarau_data['WSPM'], kemarau_data['PM10'], alpha=0.6, color='orange')
-# Hitung dan gambar garis regresi secara manual
-m_kemarau, b_kemarau = np.polyfit(kemarau_data['WSPM'], kemarau_data['PM10'], 1)
-ax2a.plot(kemarau_data['WSPM'], m_kemarau * kemarau_data['WSPM'] + b_kemarau, color='red', linestyle='--', label='Regresi Linear')
+# Musim Kemarau
+sns.scatterplot(data=daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Kemarau'],
+                x='WSPM', y='PM10', alpha=0.6, color='orange', ax=ax2a)
+sns.regplot(data=daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Kemarau'],
+            x='WSPM', y='PM10', scatter=False, color='red', line_kws={'linestyle': '--'}, ax=ax2a)
 ax2a.set_title('WSPM vs PM10 di Dongsi (Musim Kemarau)')
 ax2a.set_xlabel('Kecepatan Angin (WSPM)')
 ax2a.set_ylabel('Konsentrasi PM10')
 ax2a.grid(True, linestyle='--', alpha=0.7)
 
-# Scatter plot untuk Musim Hujan
-hujan_data = daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Hujan']
-ax2b.scatter(hujan_data['WSPM'], hujan_data['PM10'], alpha=0.6, color='blue')
-# Hitung dan gambar garis regresi secara manual
-m_hujan, b_hujan = np.polyfit(hujan_data['WSPM'], hujan_data['PM10'], 1)
-ax2b.plot(hujan_data['WSPM'], m_hujan * hujan_data['WSPM'] + b_hujan, color='darkblue', linestyle='--', label='Regresi Linear')
+# Musim Hujan
+sns.scatterplot(data=daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Hujan'],
+                x='WSPM', y='PM10', alpha=0.6, color='blue', ax=ax2b)
+sns.regplot(data=daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Hujan'],
+            x='WSPM', y='PM10', scatter=False, color='darkblue', line_kws={'linestyle': '--'}, ax=ax2b)
 ax2b.set_title('WSPM vs PM10 di Dongsi (Musim Hujan)')
 ax2b.set_xlabel('Kecepatan Angin (WSPM)')
 ax2b.set_ylabel('Konsentrasi PM10')
 ax2b.grid(True, linestyle='--', alpha=0.7)
 
-plt.tight_layout()
 st.pyplot(fig2)
 
 corr_kemarau = daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Kemarau'][['PM10', 'WSPM']].corr().iloc[0, 1]
 corr_hujan = daily_avg_dongsi[daily_avg_dongsi['Season'] == 'Musim Hujan'][['PM10', 'WSPM']].corr().iloc[0, 1]
 
-st.subheader("Insight Utama BQ2:")
-st.markdown(f"""
--   **Musim Kemarau (Mei-September):** Koefisien Korelasi: `{corr_kemarau:.2f}` (sangat lemah). Kecepatan angin memiliki pengaruh yang sangat lemah atau hampir tidak ada terhadap PM10.
--   **Musim Hujan (Oktober-April):** Koefisien Korelasi: `{corr_hujan:.2f}` (moderasi negatif). Peningkatan kecepatan angin cenderung berkorelasi dengan penurunan konsentrasi PM10 yang signifikan.
--   **Kesimpulan:** Musim memoderasi hubungan antara kecepatan angin dan tingkat polusi PM10, dengan angin lebih efektif membersihkan polusi di Musim Hujan.
+st.write(f"Koefisien Korelasi (WSPM vs PM10) Musim Kemarau: `{corr_kemarau:.2f}`")
+st.write(f"Koefisien Korelasi (WSPM vs PM10) Musim Hujan: `{corr_hujan:.2f}`")
+
+st.markdown("""
+**Insight:**
+*   **Musim Kemarau:** Korelasi antara kecepatan angin dan PM10 sangat lemah (mendekati nol). Kecepatan angin tidak memiliki pengaruh signifikan terhadap tingkat polusi PM10.
+*   **Musim Hujan:** Terdapat korelasi negatif moderat (-0.43), yang berarti peningkatan kecepatan angin cenderung berkorelasi dengan penurunan konsentrasi PM10. Angin lebih efektif membersihkan polutan di musim hujan.
 """)
+st.divider()
 
-# --- Bagian 3: Pola Harian Konsentrasi Polutan (PM2.5 & PM10) ---
-st.header("3. Pola Harian Konsentrasi Polutan (PM2.5 & PM10)")
-st.write("Grafik ini menunjukkan rata-rata konsentrasi PM2.5 dan PM10 setiap jam dalam sehari, mengungkap siklus harian polusi (2013-2017).")
+# --- Analisis Lanjutan: Pola Harian Konsentrasi Polutan ---
+st.header("4. Pola Harian Konsentrasi Polutan (PM2.5 & PM10)")
+st.subheader("Bagaimana rata-rata konsentrasi polutan berubah sepanjang jam dalam sehari?")
 
-# Persiapan data untuk pola harian
-hourly_avg_pollutants = df.groupby('hour')[['PM2.5', 'PM10']].mean().reset_index()
+hourly_avg_pollutants = df_main.groupby('hour')[['PM2.5', 'PM10']].mean().reset_index()
 
-fig3, ax3 = plt.subplots(figsize=(12, 6))
-ax3.plot(hourly_avg_pollutants['hour'], hourly_avg_pollutants['PM2.5'], marker='o', color='red', label='PM2.5')
-ax3.plot(hourly_avg_pollutants['hour'], hourly_avg_pollutants['PM10'], marker='o', color='blue', label='PM10')
-ax3.set_title('Rata-rata Konsentrasi PM2.5 dan PM10 per Jam dalam Sehari')
-ax3.set_xlabel('Jam dalam Sehari (0-23)')
-ax3.set_ylabel('Rata-rata Konsentrasi Polutan')
-ax3.set_xticks(range(0, 24))
-ax3.grid(True, linestyle='--', alpha=0.7)
-ax3.legend()
-plt.tight_layout()
+fig3, (ax3a, ax3b) = plt.subplots(1, 2, figsize=(18, 6))
+
+sns.lineplot(data=hourly_avg_pollutants, x='hour', y='PM2.5', marker='o', color='red', ax=ax3a)
+ax3a.set_title('Rata-rata Konsentrasi PM2.5 per Jam dalam Sehari')
+ax3a.set_xlabel('Jam dalam Sehari (0-23)')
+ax3a.set_ylabel('Rata-rata Konsentrasi PM2.5')
+ax3a.set_xticks(range(0, 24))
+ax3a.grid(True, linestyle='--', alpha=0.7)
+
+sns.lineplot(data=hourly_avg_pollutants, x='hour', y='PM10', marker='o', color='blue', ax=ax3b)
+ax3b.set_title('Rata-rata Konsentrasi PM10 per Jam dalam Sehari')
+ax3b.set_xlabel('Jam dalam Sehari (0-23)')
+ax3b.set_ylabel('Rata-rata Konsentrasi PM10')
+ax3b.set_xticks(range(0, 24))
+ax3b.grid(True, linestyle='--', alpha=0.7)
+
 st.pyplot(fig3)
 
-st.subheader("Insight Pola Harian:")
 st.markdown("""
--   **Puncak Polusi Dini Hari dan Malam Hari:** Konsentrasi PM2.5 dan PM10 cenderung mencapai puncaknya pada dini hari (sekitar jam 00:00 - 05:00) dan malam hari (sekitar jam 19:00 - 23:00).
--   **Penurunan di Pagi Hari:** Terjadi penurunan konsentrasi yang signifikan di pagi hari, kemungkinan karena peningkatan aktivitas angin atau dispersi atmosfer yang lebih baik.
--   **Fluktuasi Siang Hari:** Selama siang hari, konsentrasi polutan cenderung stabil atau sedikit meningkat kembali sebelum mencapai puncak malam hari.
+**Insight:**
+*   Konsentrasi PM2.5 dan PM10 cenderung mencapai puncaknya pada dini hari (sekitar 00:00-05:00) dan malam hari (sekitar 19:00-23:00).
+*   Terjadi penurunan konsentrasi di pagi hari, kemungkinan karena aktivitas angin yang meningkat atau dispersi atmosfer.
 """)
+st.divider()
 
-st.sidebar.header("Tentang Aplikasi")
-st.sidebar.info(
-    "Dashboard ini dibuat untuk memvisualisasikan analisis kualitas udara di tiga stasiun di Beijing. "
-    "Data telah dibersihkan dan dianalisis untuk menjawab pertanyaan bisnis terkait tren dan faktor meteorologi."
-)
+# --- Penutup ---
+st.markdown("""
+---  
+_Dashboard ini dibuat untuk Proyek Analisis Data_  
+_Sumber Data: PRSA Air Quality Data, Beijing (2013-2017)_  
+""")
