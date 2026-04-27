@@ -1,6 +1,6 @@
 # Proyek Analisis Data: Air Quality Data Analysis
+# Link Dashboard : https://cdc30implementing-air-quality-dataset-j7ftnvwftl657fkb5uddiq.streamlit.app/
 ## Deskripsi Proyek
-
 Proyek ini melakukan analisis data kualitas udara (`Air Quality Data Analysis`) untuk memahami tren polusi dan faktor-faktor yang mempengaruhinya di beberapa stasiun pengamatan di Beijing, Tiongkok, selama periode 2013-2017. Analisis ini fokus pada konsentrasi PM2.5, PM10, dan pengaruh kondisi meteorologi seperti kecepatan angin (WSPM).
 
 **Tujuan Utama:**
@@ -15,7 +15,7 @@ Data yang digunakan dalam analisis ini berasal dari dataset PRSA (Beijing PM2.5 
 *   **Dongsi:** `https://raw.githubusercontent.com/Marsello-or/CDC_30_Implementing-Air-Quality-Dataset/refs/heads/main/PRSA_Data_20130301-20170228/PRSA_Data_Dongsi_20130301-20170228.csv`
 *   **Gucheng:** `https://raw.githubusercontent.com/Marsello-or/CDC_30_Implementing-Air-Quality-Dataset/refs/heads/main/PRSA_Data_20130301-20170228/PRSA_Data_Gucheng_20130301-20170228.csv`
 
-*   ## Library yang Digunakan
+## Library yang Digunakan
 
 Proyek ini menggunakan beberapa library Python populer untuk analisis dan visualisasi data:
 
